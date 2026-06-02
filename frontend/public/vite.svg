@@ -1,0 +1,15 @@
+<svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="2.5" result="blur"/>
+    <feMerge>
+      <feMergeNode in="blur"/>
+      <feMergeNode in="SourceGraphic"/>
+    </feMerge>
+  </filter>
+  <g fill="#0099ff" filter="url(#glow)">
+    <path d="M20,25 L40,25 L30,50 L40,75 L20,75 L30,50 Z" rx="2" ry="2"/>
+    <path d="M40,25 L50,25 L45,50 L55,50 L50,25 L60,75 L50,75 L45,50 L55,50 L60,25" rx="2" ry="2"/>
+    <path d="M60,25 L70,50 L80,25 M70,50 L70,75" stroke="#0099ff" stroke-width="6" stroke-linecap="round" fill="none"/>
+    <rect x="15" y="20" width="70" height="55" rx="8" ry="8" fill="none" stroke="#0099ff" stroke-width="1.5" opacity="0.4"/>
+  </g>
+</svg>

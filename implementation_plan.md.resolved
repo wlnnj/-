@@ -1,0 +1,443 @@
+# 私有云博系统 - 实施计划
+
+一个高交互、数据隔离的私有云博系统，集成社交、私有云盘、媒体管理和个人办公功能。
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **技术栈选型确认**
+> - **后端框架**: 推荐使用 **NestJS** (Node.js)，理由：
+>   - 与 Vue 3 前端技术栈一致 (TypeScript)
+>   - 原生支持 WebSocket (Socket.io)
+>   - 开发效率高，适合中小型团队
+>   - 如您偏好 Java 生态，可切换至 Spring Boot 3
+
+> [!WARNING]
+> **存储容量规划**
+> - 单文件最大 1GB 需确认服务器磁盘容量
+> - 建议配置对象存储 (如 MinIO) 用于媒体文件
+
+---
+
+## 技术架构
+
+```mermaid
+graph TB
+    subgraph Frontend["前端 (Vue 3 + Vite)"]
+        UI[Naive UI + Tailwind CSS]
+        Pinia[Pinia 状态管理]
+        GSAP[GSAP 动画]
+        Socket[Socket.io Client]
+    end
+
+    subgraph Backend["后端 (NestJS)"]
+        Auth[认证模块]
+        Guard[数据隔离守卫]
+        API[RESTful API]
+        WS[WebSocket Gateway]
+    end
+
+    subgraph Database["数据层"]
+        PG[(PostgreSQL)]
+        Redis[(Redis)]
+    end
+
+    Frontend --> Backend
+    Backend --> Database
+```
+
+---
+
+## Proposed Changes
+
+### 1. 项目结构
+
+```
+zky/
+├── backend/                    # NestJS 后端
+│   ├── src/
+│   │   ├── auth/               # 认证模块
+│   │   ├── users/              # 用户管理
+│   │   ├── files/              # 云盘模块
+│   │   ├── memos/              # 备忘录
+│   │   ├── posts/              # 帖子社交
+│   │   ├── media/              # 媒体管理
+│   │   ├── messages/           # 消息中心
+│   │   ├── calendar/           # 日历
+│   │   ├── admin/              # 管理后台
+│   │   └── common/             # 公共模块 (拦截器/守卫)
+│   └── package.json
+│
+├── frontend/                   # Vue 3 前端
+│   ├── src/
+│   │   ├── assets/css/         # 全局样式与CSS变量
+│   │   ├── components/         # 公共组件
+│   │   ├── views/              # 页面视图
+│   │   ├── stores/             # Pinia 状态
+│   │   ├── composables/        # 组合式函数
+│   │   └── utils/              # 工具函数
+│   └── package.json
+│
+├── nginx/                      # Nginx 配置
+│   └── nginx.conf
+│
+└── docker-compose.yml          # Docker 编排
+```
+
+---
+
+### 2. 后端模块
+
+#### [NEW] `backend/src/common/guards/user-isolation.guard.ts`
+数据隔离守卫 - 在 SQL 查询层自动注入 `user_id` 过滤条件
+
+#### [NEW] `backend/src/auth/auth.module.ts`
+JWT 认证模块 - 支持角色区分 (admin/user)
+
+#### [NEW] `backend/src/files/files.service.ts`
+文件云盘服务 - 分片上传、Token 下载链接、二维码生成
+
+#### [NEW] `backend/src/messages/messages.gateway.ts`
+WebSocket 网关 - 即时通讯实现
+
+---
+
+### 3. 前端模块
+
+#### [NEW] `frontend/src/assets/css/variables.css`
+CSS 变量系统 - 主题色切换核心
+
+```css
+:root {
+  /* 基础色 */
+  --bg-primary: #000000;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --border-color: rgba(var(--accent-rgb), 0.2);
+  
+  /* 主题色 - 赛博蓝 (默认) */
+  --accent-rgb: 0, 200, 255;
+  --accent-color: rgb(var(--accent-rgb));
+  
+  /* 毛玻璃效果 */
+  --glass-blur: 12px;
+  --glass-border: 1px solid var(--border-color);
+}
+
+/* 主题色预设 */
+[data-theme="neon-green"] {
+  --accent-rgb: 0, 255, 128;
+}
+
+[data-theme="lava-red"] {
+  --accent-rgb: 255, 60, 60;
+}
+```
+
+#### [NEW] `frontend/src/components/GlassCard.vue`
+毛玻璃卡片组件 - 悬停动效、发光边框
+
+#### [NEW] `frontend/src/composables/useTheme.ts`
+主题切换组合式函数
+
+---
+
+### 4. 数据库设计
+
+```sql
+-- 用户表
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(20) DEFAULT 'user',
+    accent_color VARCHAR(20) DEFAULT 'cyber-blue',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 文件表
+CREATE TABLE files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size BIGINT NOT NULL,
+    mime_type VARCHAR(100),
+    qr_token VARCHAR(100) UNIQUE,
+    qr_expires_at TIMESTAMP,
+    is_public BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 消息表
+CREATE TABLE messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sender_id UUID REFERENCES users(id),
+    receiver_id UUID REFERENCES users(id),
+    content TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 帖子表
+CREATE TABLE posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    images JSONB DEFAULT '[]',
+    comment_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 备忘录表
+CREATE TABLE memos (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200),
+    content TEXT,
+    is_markdown BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 日历事件表
+CREATE TABLE calendar_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    event_date DATE NOT NULL,
+    event_time TIME,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 用户数据隔离索引
+CREATE INDEX idx_files_user ON files(user_id);
+CREATE INDEX idx_memos_user ON memos(user_id);
+CREATE INDEX idx_media_user ON media(user_id);
+CREATE INDEX idx_calendar_user ON calendar_events(user_id);
+```
+
+---
+
+### 5. Nginx 配置
+
+#### [NEW] `nginx/nginx.conf`
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    # 大文件上传配置 (1GB)
+    client_max_body_size 1024M;
+    client_body_timeout 3600s;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    
+    # 分片上传缓冲
+    client_body_buffer_size 512k;
+    
+    # 前端静态文件
+    location / {
+        root /var/www/frontend/dist;
+        try_files $uri $uri/ /index.html;
+    }
+    
+    # API 代理
+    location /api {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+    
+    # WebSocket 代理
+    location /socket.io {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+---
+
+### 6. MinIO 对象存储配置
+
+#### 服务器安装 (Linux)
+
+```bash
+# 1. 下载 MinIO
+wget https://dl.min.io/server/minio/release/linux-amd64/minio
+chmod +x minio
+sudo mv minio /usr/local/bin/
+
+# 2. 创建数据目录
+sudo mkdir -p /data/minio
+
+# 3. 创建系统服务
+sudo nano /etc/systemd/system/minio.service
+```
+
+**minio.service 内容：**
+```ini
+[Unit]
+Description=MinIO
+After=network.target
+
+[Service]
+User=minio-user
+Group=minio-user
+Environment="MINIO_ROOT_USER=admin"
+Environment="MINIO_ROOT_PASSWORD=your_secure_password_here"
+ExecStart=/usr/local/bin/minio server /data/minio --console-address ":9001"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+# 4. 启动服务
+sudo systemctl daemon-reload
+sudo systemctl enable minio
+sudo systemctl start minio
+
+# 5. 检查状态
+sudo systemctl status minio
+```
+
+#### 访问端口
+| 端口 | 用途 |
+|------|------|
+| 9000 | API 端口 (后端连接用) |
+| 9001 | Web 控制台 (浏览器管理) |
+
+#### Nginx 代理配置 (可选)
+
+```nginx
+# MinIO API
+location /storage {
+    proxy_pass http://127.0.0.1:9000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+
+# MinIO 控制台
+location /minio-console {
+    proxy_pass http://127.0.0.1:9001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+#### NestJS 连接配置
+
+```typescript
+// backend/.env
+MINIO_ENDPOINT=localhost
+MINIO_PORT=9000
+MINIO_ACCESS_KEY=admin
+MINIO_SECRET_KEY=your_secure_password_here
+MINIO_BUCKET=zky-files
+```
+
+---
+
+### 7. GSAP 动画示例
+
+#### [NEW] `frontend/src/composables/useAnimations.ts`
+
+```typescript
+import { gsap } from 'gsap';
+
+// 卡片入场动画
+export function useCardEntrance(elements: HTMLElement[]) {
+  gsap.fromTo(elements, 
+    { opacity: 0, y: 50, scale: 0.95 },
+    { 
+      opacity: 1, 
+      y: 0, 
+      scale: 1,
+      duration: 0.6,
+      stagger: 0.1,
+      ease: 'power3.out'
+    }
+  );
+}
+
+// 悬停发光效果
+export function useGlowHover(element: HTMLElement) {
+  element.addEventListener('mouseenter', () => {
+    gsap.to(element, {
+      boxShadow: '0 0 30px rgba(var(--accent-rgb), 0.4)',
+      scale: 1.02,
+      duration: 0.3
+    });
+  });
+  
+  element.addEventListener('mouseleave', () => {
+    gsap.to(element, {
+      boxShadow: '0 0 0px transparent',
+      scale: 1,
+      duration: 0.3
+    });
+  });
+}
+```
+
+---
+
+## Verification Plan
+
+### 自动化测试
+
+1. **后端 API 测试**
+   ```bash
+   cd backend && npm run test:e2e
+   ```
+
+2. **数据隔离测试**
+   - 创建用户 A 和用户 B
+   - 用户 A 上传文件
+   - 验证用户 B 无法访问用户 A 的文件
+
+### 手动验证
+
+1. **主题切换测试**
+   - 在浏览器中切换三种主题色
+   - 确认边框、按钮、高亮文字颜色正确变化
+   - 确认背景始终为纯黑 (#000000)
+
+2. **大文件上传测试**
+   - 上传接近 1GB 的文件
+   - 验证分片上传进度显示
+   - 验证断点续传功能
+
+3. **即时通讯测试**
+   - 开启两个浏览器窗口登录不同账户
+   - 发送消息验证实时接收
+
+---
+
+## 开发优先级
+
+| 阶段 | 模块 | 预计工时 |
+|------|------|----------|
+| 1 | 项目初始化 + 基础架构 | 4h |
+| 2 | 认证系统 + 数据隔离 | 6h |
+| 3 | 前端设计系统 + 主题切换 | 4h |
+| 4 | 文件云盘 (核心功能) | 8h |
+| 5 | 社交帖子 + 备忘录 | 6h |
+| 6 | 媒体管理 (瀑布流/播放器) | 6h |
+| 7 | 消息中心 + WebSocket | 6h |
+| 8 | 日历 + 管理后台 | 4h |
+| 9 | 动画优化 + 部署配置 | 4h |
+
+---
+
+**请确认以上技术方案，我将开始执行开发。**

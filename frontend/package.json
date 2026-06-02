@@ -1,0 +1,37 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx vite@6.0.7",
+    "build": "npx vue-tsc -b && npx vite@6.0.7 build",
+    "preview": "npx vite@6.0.7 preview"
+  },
+  "dependencies": {
+    "@excalidraw/excalidraw": "^0.18.0",
+    "@types/uuid": "^10.0.0",
+    "@vicons/ionicons5": "^0.13.0",
+    "axios": "^1.7.9",
+    "gsap": "^3.12.5",
+    "naive-ui": "^2.40.1",
+    "pinia": "^2.2.6",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.1",
+    "uuid": "^13.0.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.7",
+    "@types/react": "^19.2.9",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@vue/tsconfig": "^0.7.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.6.3",
+    "vite": "^6.4.1",
+    "vue-tsc": "^2.2.12"
+  }
+}
